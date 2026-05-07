@@ -1,0 +1,1 @@
+export const CHURCH_LOGO_URL = "/assets/church-logo.png";

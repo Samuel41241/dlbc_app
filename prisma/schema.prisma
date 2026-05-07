@@ -1,0 +1,389 @@
+// ========================================
+// DLBC ATTENDANCE INTELLIGENCE SYSTEM
+// PRODUCTION-READY SCHEMA — Strict RBAC + 3NF
+// ========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// HIERARCHY TABLES
+// State → Region → Group → District → Location
+// ========================================
+
+model State {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  regions           Region[]
+  profiles          Profile[]
+  messageTemplates  MessageTemplate[]
+
+  @@map("states")
+}
+
+model Region {
+  id        String   @id @default(cuid())
+  name      String
+  stateId   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  state             State        @relation(fields: [stateId], references: [id])
+  groups            ChurchGroup[]
+  profiles          Profile[]
+  messageTemplates  MessageTemplate[]
+
+  @@map("regions")
+}
+
+model ChurchGroup {
+  id        String   @id @default(cuid())
+  name      String
+  regionId  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  region            Region     @relation(fields: [regionId], references: [id])
+  districts         District[]
+  profiles          Profile[]
+  messageTemplates  MessageTemplate[]
+
+  @@map("groups")
+}
+
+model District {
+  id        String   @id @default(cuid())
+  name      String
+  groupId   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  group             ChurchGroup @relation(fields: [groupId], references: [id])
+  locations         Location[]
+  profiles          Profile[]
+  messageTemplates  MessageTemplate[]
+
+  @@map("districts")
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String
+  districtId String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  district          District           @relation(fields: [districtId], references: [id])
+  profiles          Profile[]
+  members           Member[]
+  attendance        Attendance[]
+  newcomers         Newcomer[]
+  newcomerHeadcounts NewcomerHeadcount[]
+  messageTemplates  MessageTemplate[]
+
+  @@map("locations")
+}
+
+// ========================================
+// PROFILES TABLE (Users with RBAC)
+// Hierarchy fields are HERE to define access scope.
+// ========================================
+
+model Profile {
+  id                  String             @id @default(cuid())
+  email               String             @unique
+  fullName            String?
+  passwordHash        String
+  role                String             @default("location_pastor")
+  stateId             String?
+  regionId            String?
+  groupId             String?
+  districtId          String?
+  locationId          String?
+  status              String             @default("active")
+  isActive            Boolean            @default(true)
+  isLocked            Boolean            @default(false)
+  failedLoginAttempts Int                @default(0)
+  lockedAt            DateTime?
+  createdAt           DateTime           @default(now())
+
+  state               State?             @relation(fields: [stateId], references: [id])
+  region              Region?            @relation(fields: [regionId], references: [id])
+  group               ChurchGroup?       @relation(fields: [groupId], references: [id])
+  district            District?          @relation(fields: [districtId], references: [id])
+  location            Location?          @relation(fields: [locationId], references: [id])
+  wallet              Wallet?
+  messageTemplates    MessageTemplate[]
+  auditLogs           AuditLog[]
+  engagementActions   EngagementAction[] 
+
+  @@map("profiles")
+}
+
+// ========================================
+// SERVICE TYPES (Phase 11)
+// Moved UP because Attendance/Newcomers depend on it.
+// ========================================
+
+model ServiceType {
+  id                String               @id @default(cuid())
+  name              String               @unique
+  dayOfWeek         Int
+  isActive          Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+
+  attendance        Attendance[]
+  newcomers         Newcomer[]
+  newcomerHeadcounts NewcomerHeadcount[]
+
+  @@map("service_types")
+}
+
+// ========================================
+// MEMBERS TABLE
+// PURE NORMALIZATION: Only locationId is stored.
+// To get State: member.location.district.group.region.state
+// ========================================
+
+model Member {
+  id          String   @id @default(cuid())
+  fullName    String
+  category    String   @default("Adult")
+  gender      String?
+  phone       String?
+  address     String?
+  locationId  String
+  isActive    Boolean  @default(true)
+  cardNumber  String   @unique
+  dateJoined  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt // ✅ ADDED
+
+  location           Location           @relation(fields: [locationId], references: [id])
+  attendances        AttendanceMember[]
+  engagementActions  EngagementAction[]
+
+  @@map("members")
+}
+
+// ========================================
+// ATTENDANCE TABLE
+// Enterprise Pattern: FK to ServiceType + snapshot string.
+// If "Sunday Service" is renamed, historical records stay accurate.
+// ========================================
+
+model Attendance {
+  id            String      @id @default(cuid())
+  locationId    String
+  serviceTypeId String      // ✅ FK to ServiceType
+  serviceName   String      // ✅ Snapshot (prevents data drift if service is renamed)
+  serviceDate   DateTime
+  present       Int         @default(0)
+  total         Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt // ✅ ADDED
+
+  location           Location           @relation(fields: [locationId], references: [id])
+  service            ServiceType        @relation(fields: [serviceTypeId], references: [id])
+  members            AttendanceMember[]
+  engagementActions  EngagementAction[]
+
+  @@map("attendance")
+}
+
+// ========================================
+// ATTENDANCE MEMBER JUNCTION TABLE
+// ========================================
+
+model AttendanceMember {
+  id           String     @id @default(cuid())
+  attendanceId String
+  memberId     String
+  status       String     @default("present")
+  
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  member       Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([attendanceId, memberId])
+  @@map("attendance_members")
+}
+
+// ========================================
+// NEWCOMERS TABLE
+// ========================================
+
+model Newcomer {
+  id            String      @id @default(cuid())
+  fullName      String
+  phoneNumber   String?
+  email         String?
+  address       String?
+  category      String      @default("Adult")
+  gender        String?
+  locationId    String
+  serviceTypeId String      // ✅ FK to ServiceType
+  serviceName   String      // ✅ Snapshot
+  dateRecorded  DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt // ✅ ADDED
+
+  location      Location    @relation(fields: [locationId], references: [id])
+  service       ServiceType @relation(fields: [serviceTypeId], references: [id])
+
+  @@map("newcomers")
+}
+
+// ========================================
+// NEWCOMER HEADCOUNT TABLE
+// CRITICAL FIX: Was missing locationId entirely!
+// ========================================
+
+model NewcomerHeadcount {
+  id             String      @id @default(cuid())
+  locationId     String      // ✅ ADDED (Was completely missing!)
+  serviceTypeId  String      // ✅ FK to ServiceType
+  serviceName    String      // ✅ Snapshot
+  serviceDate    DateTime    @default(now())
+  adultMale      Int         @default(0)
+  adultFemale    Int         @default(0)
+  youthBoys      Int         @default(0)
+  youthGirls     Int         @default(0)
+  childrenBoys   Int         @default(0)
+  childrenGirls  Int         @default(0)
+  createdAt      DateTime    @default(now())
+
+  location       Location    @relation(fields: [locationId], references: [id])
+  service        ServiceType @relation(fields: [serviceTypeId], references: [id])
+
+  @@map("newcomer_headcounts")
+}
+
+// ========================================
+// ENGAGEMENT ACTIONS TABLE
+// ========================================
+
+model EngagementAction {
+  id           String     @id @default(cuid())
+  memberId     String
+  attendanceId String
+  actionType   String
+  actorId      String
+  
+  member       Member     @relation(fields: [memberId], references: [id])
+  attendance   Attendance @relation(fields: [attendanceId], references: [id])
+  actor        Profile    @relation(fields: [actorId], references: [id]) // ✅ Linked to Profile
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([memberId, attendanceId])
+  @@map("engagement_actions")
+}
+
+// ========================================
+// AUDIT LOGS TABLE
+// Enterprise Fix: Actor is now a real FK to Profile
+// ========================================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  actionType  String
+  actorId     String?   // ✅ Made nullable in case system performs action
+  target      String?
+  targetId    String?
+  description String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  actor       Profile?  @relation(fields: [actorId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ========================================
+// SYSTEM SETTINGS
+// ========================================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// ========================================
+// WALLET SYSTEM
+// ========================================
+
+model Wallet {
+  id        String   @id @default(cuid())
+  profileId String   @unique
+  balance   Int      @default(0)
+  
+  profile       Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  transactions  WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id              String   @id @default(cuid())
+  walletId        String
+  type            String
+  amount          Int
+  previousBalance Int
+  newBalance      Int
+  reference       String  @unique
+  description     String
+  status          String   @default("SUCCESS")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  wallet          Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_transactions")
+}
+
+// ========================================
+// MESSAGE TEMPLATES (CMS)
+// Fixed duplicate profile relation.
+// Hierarchy fields kept as explicit @relation 
+// because templates can be scoped independently of creator.
+// ========================================
+
+model MessageTemplate {
+  id          String    @id @default(cuid())
+  title       String
+  content     String
+  profileId   String
+  
+  // Explicit Scope (Who is allowed to use this template?)
+  stateId     String?
+  regionId    String?
+  groupId     String?
+  districtId  String?
+  locationId  String?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  profile     Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  state       State?     @relation(fields: [stateId], references: [id])
+  region      Region?    @relation(fields: [regionId], references: [id])
+  group       ChurchGroup? @relation(fields: [groupId], references: [id])
+  district    District?  @relation(fields: [districtId], references: [id])
+  location    Location?  @relation(fields: [locationId], references: [id])
+
+  @@map("message_templates")
+}
