@@ -248,8 +248,9 @@ export async function createNewcomer(
 export interface AuditLogRecord {
   id: string;
   actionType: string;
-  // ✅ ENTERPRISE FIX: Removed 'actor' and 'actorRole' strings. Backend now only returns actorId FK
+  actor: string | null;
   actorId: string | null;
+  actorRole: string | null;
   target: string | null;
   targetId: string | null;
   description: string | null;

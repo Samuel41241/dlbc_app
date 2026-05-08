@@ -11,6 +11,7 @@ function getRLSContext(request: NextRequest): RLSContext | null {
   if (!user) return null;
 
   return {
+     userId: user.userId,
     role: user.role,
     scope: {
       stateId: user.stateId || null,
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
     // ✅ PRODUCTION FIX: Build RLS Context directly from YOUR custom verified token.
     // We bypass getUserFromRequest entirely to ensure we never accidentally touch Supabase sessions.
     const ctx: RLSContext = {
+       userId: user.userId,
       role: user.role,
       scope: {
         stateId: user.stateId || null,

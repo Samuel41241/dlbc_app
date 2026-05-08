@@ -15,36 +15,66 @@ interface AbsenteeMember {
 
 export async function GET(request: NextRequest) {
   const user = getUserFromRequest(request);
-  if (user === null) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  if (user === null) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   try {
     const roleCategory = getRoleCategory(user.role);
     const isManager = roleCategory === 'admin';
-    
+
     if (isManager || !user.locationId) {
       return NextResponse.json({ absentees: [] });
     }
 
     const pastDate = new Date();
-    pastDate.setDate(pastDate.getDate() - 35); 
+    pastDate.setDate(pastDate.getDate() - 35);
 
-    // ✅ Explicitly type the Prisma response array
-    const absences: (AttendanceMember & { member: { fullName: string; phone: string | null; isActive: boolean }; attendance: { id: string; serviceDate: Date } })[] = 
-      await db.attendanceMember.findMany({
+    const sundayService = await db.serviceType.findFirst({
+      where: {
+        name: 'Sunday Worship Service',
+        isActive: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!sundayService) {
+      return NextResponse.json({ absentees: [] });
+    }
+
+    const absences = await db.attendanceMember.findMany({
       where: {
         status: 'absent',
         attendance: {
           locationId: user.locationId,
-          serviceType: 'Sunday Worship Service',
-          serviceDate: { gte: pastDate }
+          serviceTypeId: sundayService.id,
+          serviceDate: { gte: pastDate },
         },
-        member: { isActive: true }
+        member: { isActive: true },
       },
       include: {
-        member: { select: { fullName: true, phone: true, isActive: true } },
-        attendance: { select: { id: true, serviceDate: true } }
+        member: {
+          select: {
+            fullName: true,
+            phone: true,
+            isActive: true,
+          },
+        },
+        attendance: {
+          select: {
+            id: true,
+            serviceDate: true,
+          },
+        },
       },
-      orderBy: { attendance: { serviceDate: 'desc' } }
+      orderBy: {
+        attendance: {
+          serviceDate: 'desc',
+        },
+      },
     });
 
     if (absences.length === 0) return NextResponse.json({ absentees: [] });

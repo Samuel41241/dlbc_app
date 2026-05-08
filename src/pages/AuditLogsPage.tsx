@@ -6,7 +6,7 @@ import { useAppStore } from '@/lib/store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { fetchAuditLogs } from '@/lib/api';
+import { fetchAuditLogs, type AuditLogRecord} from '@/lib/api';
 import {
   Select,
   SelectContent,
@@ -31,17 +31,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface AuditLogRecord {
-  id: string;
-  actionType: string;
-  actor: string | null;
-  actorId: string | null;
-  actorRole: string | null;
-  target: string | null;
-  targetId: string | null;
-  description: string | null;
-  createdAt: string;
-}
 
 const actionTypeLabels: Record<string, string> = {
   CREATE_USER: 'Create User',
@@ -133,6 +122,7 @@ export default function AuditLogsPage() {
       const matchesSearch =
         searchQuery === '' ||
         (log.actor || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (log.actorId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (log.target || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (log.description || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesAction && matchesSearch;
@@ -282,8 +272,8 @@ export default function AuditLogsPage() {
                     <p className="text-sm text-foreground leading-snug">{log.description}</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
                       <span className="text-[11px] text-muted-foreground">
-                        <span className="font-medium text-foreground/70">Actor:</span> {log.actor}
-                      </span>
+  <span className="font-medium text-foreground/70">Actor ID:</span> {log.actorId || 'System'}
+</span>
                       {log.actorRole && (
                         <span className="text-[11px] text-muted-foreground">
                           <span className="font-medium text-foreground/70">Role:</span> {log.actorRole}

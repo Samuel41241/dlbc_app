@@ -47,7 +47,7 @@ export class MessagingService {
         where: {
           ...rlsFilter,
           NOT: {
-            attendanceMember: {
+            attendances: {
               some: {
                 attendance: {
                   serviceDate: new Date(selectedDate!),
