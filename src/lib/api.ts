@@ -26,26 +26,26 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(path, {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
   });
 
   const data = await res.json();
 
-  // 🔥 Normalize backend response
   if (!res.ok || data.success === false) {
     throw new ApiError(
-      data.error || "Request failed",
+      data.error || 'Request failed',
       res.status
     );
   }
-  
+
   if (data.total !== undefined && Array.isArray(data.data)) {
     return { data: data.data, total: data.total } as unknown as T;
   }
 
-  // ✅ Return ONLY actual data
   return data.data as T;
 }
 

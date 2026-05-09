@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DLBCA</string>
+    <string name="title_activity_main">DLBCA</string>
+    <string name="package_name">com.xuzentra.dlbcattendance</string>
+    <string name="custom_url_scheme">com.xuzentra.dlbcattendance</string>
+</resources>
